@@ -18,7 +18,7 @@ export default function HomePage() {
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
-        title="Uber Shared Services"
+        title=".monks Operations"
         subtitle="AI-powered operations command center"
       />
 

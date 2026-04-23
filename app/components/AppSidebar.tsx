@@ -53,10 +53,9 @@ export function AppSidebar() {
         <Link href="/" className="block">
           <Image
             src="/logo.png"
-            alt="Logo"
-            width={80}
-            height={28}
-            className="invert"
+            alt=".monks"
+            width={100}
+            height={32}
             priority
           />
         </Link>
@@ -144,7 +143,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="p-3">
         <div className="flex items-center justify-between">
-          <Text level="xSmall" color="muted">Powered by Kognitos</Text>
+          <Text level="xSmall" color="muted">Powered by .monks</Text>
           <ModeToggle />
         </div>
       </SidebarFooter>
