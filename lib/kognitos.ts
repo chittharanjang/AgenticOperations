@@ -4,24 +4,29 @@ const WORKSPACE_ID = process.env.KOGNITOS_WORKSPACE_ID;
 const BASE_URL = process.env.KOGNITOS_BASE_URL;
 const AUTOMATION_ID = process.env.KOGNITOS_AUTOMATION_ID;
 
-const required: Record<string, string | undefined> = {
-  KOGNITOS_TOKEN: TOKEN,
-  KOGNITOS_ORG_ID: ORG_ID,
-  KOGNITOS_WORKSPACE_ID: WORKSPACE_ID,
-  KOGNITOS_BASE_URL: BASE_URL,
-};
+let _validated = false;
+function validateEnv() {
+  if (_validated) return;
+  const required: Record<string, string | undefined> = {
+    KOGNITOS_TOKEN: TOKEN,
+    KOGNITOS_ORG_ID: ORG_ID,
+    KOGNITOS_WORKSPACE_ID: WORKSPACE_ID,
+    KOGNITOS_BASE_URL: BASE_URL,
+  };
 
-for (const [name, value] of Object.entries(required)) {
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-}
+  for (const [name, value] of Object.entries(required)) {
+    if (!value) throw new Error(`Missing required env var: ${name}`);
+  }
 
-if (!AUTOMATION_ID) {
-  console.warn("KOGNITOS_AUTOMATION_ID not set — some features will be unavailable");
+  if (!AUTOMATION_ID) {
+    console.warn("KOGNITOS_AUTOMATION_ID not set — some features will be unavailable");
+  }
+  _validated = true;
 }
 
 export { ORG_ID, WORKSPACE_ID, BASE_URL, AUTOMATION_ID };
 
-export const APP_URL = BASE_URL!.replace("/api/v1", "");
+export const APP_URL = (BASE_URL ?? "").replace("/api/v1", "");
 
 export function kognitosRunUrl(runId: string, automationId?: string): string {
   const autoId = automationId || AUTOMATION_ID;
@@ -29,6 +34,7 @@ export function kognitosRunUrl(runId: string, automationId?: string): string {
 }
 
 export async function req(path: string, options: RequestInit = {}): Promise<Response> {
+  validateEnv();
   const url = `${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
   return fetch(url, {
     ...options,
