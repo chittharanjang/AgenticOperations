@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { supabaseAdmin, TABLES } from "@/lib/supabase";
+import { query, execute, TABLES } from "@/lib/databricks";
 import { buildSystemPrompt } from "@/lib/chat/system-prompt";
 import { req, ORG_ID, WORKSPACE_ID } from "@/lib/kognitos";
 import { getAutomationBySlug } from "@/lib/automations";
@@ -112,36 +112,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing sessionId or message" }, { status: 400 });
   }
 
-  if (supabaseAdmin) {
-    await supabaseAdmin
-      .from(TABLES.messages)
-      .insert({ session_id: sessionId, role: "user", content: message });
-  }
+  await execute(
+    `INSERT INTO ${TABLES.messages} (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, current_timestamp())`,
+    [crypto.randomUUID(), sessionId, "user", message],
+  );
 
   const systemPrompt = await buildSystemPrompt();
 
   let existingMessages: Anthropic.MessageParam[] = [];
-  if (supabaseAdmin) {
-    const { data: dbMessages } = await supabaseAdmin
-      .from(TABLES.messages)
-      .select("role, content")
-      .eq("session_id", sessionId)
-      .order("created_at", { ascending: true });
-    if (dbMessages) {
-      const filtered = dbMessages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+  const dbMessages = await query<{ role: string; content: string }>(
+    `SELECT role, content FROM ${TABLES.messages} WHERE session_id = ? ORDER BY created_at ASC`,
+    [sessionId],
+  );
+  if (dbMessages.length > 0) {
+    const filtered = dbMessages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-      for (const msg of filtered) {
-        const last = existingMessages[existingMessages.length - 1];
-        if (last && last.role === msg.role) {
-          last.content = last.content + "\n\n" + msg.content;
-        } else {
-          existingMessages.push(msg);
-        }
+    for (const msg of filtered) {
+      const last = existingMessages[existingMessages.length - 1];
+      if (last && last.role === msg.role) {
+        last.content = last.content + "\n\n" + msg.content;
+      } else {
+        existingMessages.push(msg);
       }
     }
-  } else {
+  }
+  if (existingMessages.length === 0) {
     existingMessages = [{ role: "user", content: message }];
   }
 
@@ -209,29 +206,27 @@ export async function POST(request: Request) {
           ];
         }
 
-        if (supabaseAdmin) {
-          await supabaseAdmin
-            .from(TABLES.messages)
-            .insert({ session_id: sessionId, role: "assistant", content: fullAssistantResponse || "" });
-        }
+        await execute(
+          `INSERT INTO ${TABLES.messages} (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, current_timestamp())`,
+          [crypto.randomUUID(), sessionId, "assistant", fullAssistantResponse || ""],
+        );
 
-        if (supabaseAdmin) {
-          const { count } = await supabaseAdmin
-            .from(TABLES.messages)
-            .select("*", { count: "exact", head: true })
-            .eq("session_id", sessionId);
+        const countRows = await query<{ cnt: string }>(
+          `SELECT COUNT(*) AS cnt FROM ${TABLES.messages} WHERE session_id = ?`,
+          [sessionId],
+        );
+        const count = parseInt(countRows[0]?.cnt ?? "0", 10);
 
-          if (count && count <= 3) {
-            try {
-              const title = await generateTitle(message, fullAssistantResponse);
-              await supabaseAdmin
-                .from(TABLES.sessions)
-                .update({ title, updated_at: new Date().toISOString() })
-                .eq("id", sessionId);
-              send({ type: "title", content: title });
-            } catch {
-              /* title generation is best-effort */
-            }
+        if (count <= 3) {
+          try {
+            const title = await generateTitle(message, fullAssistantResponse);
+            await execute(
+              `UPDATE ${TABLES.sessions} SET title = ?, updated_at = current_timestamp() WHERE id = ?`,
+              [title, sessionId],
+            );
+            send({ type: "title", content: title });
+          } catch {
+            /* title generation is best-effort */
           }
         }
 

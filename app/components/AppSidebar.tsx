@@ -143,7 +143,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="p-3">
         <div className="flex items-center justify-between">
-          <Text level="xSmall" color="muted">Powered by .monks</Text>
+          <Text level="xSmall" className="text-lime-400">Powered by Kognitos</Text>
           <ModeToggle />
         </div>
       </SidebarFooter>

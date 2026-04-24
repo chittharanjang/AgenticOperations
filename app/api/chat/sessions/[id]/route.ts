@@ -1,47 +1,45 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin, TABLES } from "@/lib/supabase";
+import { query, execute, TABLES } from "@/lib/databricks";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!supabaseAdmin) {
-    return NextResponse.json({ messages: [] });
+
+  try {
+    const messages = await query(
+      `SELECT * FROM ${TABLES.messages} WHERE session_id = ? ORDER BY created_at ASC`,
+      [id],
+    );
+    return NextResponse.json({ messages });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Query failed" }, { status: 500 });
   }
-
-  const { data: messages, error } = await supabaseAdmin
-    .from(TABLES.messages)
-    .select("*")
-    .eq("session_id", id)
-    .order("created_at", { ascending: true });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ messages });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!supabaseAdmin) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
+
+  try {
+    const body = await req.json();
+    await execute(
+      `UPDATE ${TABLES.sessions} SET title = ?, updated_at = current_timestamp() WHERE id = ?`,
+      [body.title, id],
+    );
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Update failed" }, { status: 500 });
   }
-
-  const body = await req.json();
-  const { error } = await supabaseAdmin
-    .from(TABLES.sessions)
-    .update({ title: body.title, updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!supabaseAdmin) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
-  }
 
-  const { error } = await supabaseAdmin.from(TABLES.sessions).delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  try {
+    await execute(`DELETE FROM ${TABLES.messages} WHERE session_id = ?`, [id]);
+    await execute(`DELETE FROM ${TABLES.sessions} WHERE id = ?`, [id]);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Delete failed" }, { status: 500 });
+  }
 }
